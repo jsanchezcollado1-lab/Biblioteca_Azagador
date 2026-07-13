@@ -1,19 +1,11 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import unicodedata
 
 st.set_page_config(page_title="Mi Biblioteca Virtual", page_icon="📚", layout="wide")
 
-# Conexión mágica con Google Sheets utilizando los secretos guardados
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # Forzamos ttl=0 para que siempre lea los datos más recientes en tiempo real
-    df = conn.read(ttl=0)
-except Exception as e:
-    st.error(f"Error de conexión con Google Sheets: {e}")
-    st.info("Revisa que hayas creado el archivo '.streamlit/secrets.toml' correctamente con el enlace de tu documento.")
-    st.stop()
+# Usamos directamente la URL de exportación pública que no requiere permisos de API de Google
+URL_CSV = "https://docs.google.com/spreadsheets/d/1seARxKE_IvbGkQXZYgPWLmW-k34NsFIF/export?format=csv"
 
 # Función para quitar tildes y hacer la búsqueda infalible
 def normalizar_texto(texto):
@@ -22,11 +14,23 @@ def normalizar_texto(texto):
     texto = str(texto).lower().strip()
     return "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
+# Cargar los datos directamente desde el enlace CSV público
+@st.cache_data(ttl=5)  # Se actualiza rápido
+def cargar_datos():
+    try:
+        # Forzamos la lectura limpia del CSV de Google
+        return pd.read_csv(URL_CSV)
+    except Exception as e:
+        st.error(f"Error al leer el documento de Google Sheets: {e}")
+        return pd.DataFrame()
+
+df = cargar_datos()
+
 st.title("📚 Buscador y Gestor de Biblioteca")
-st.write("Busca cualquier libro y registra a quién se lo has prestado en tiempo real.")
+st.write("Busca cualquier libro de tu colección en tiempo real.")
 
 if df.empty:
-    st.warning("La hoja de cálculo parece estar vacía o no se puede leer.")
+    st.warning("No se pudieron cargar los libros. Revisa que el documento de Google Sheets esté compartido como 'Cualquier persona con el enlace'.")
 else:
     columnas_reales = df.columns.tolist()
     
@@ -34,7 +38,6 @@ else:
     busqueda_usuario = st.text_input("🔍 Escribe el título, autor o letras del libro:", "")
     busqueda_normalizada = normalizar_texto(busqueda_usuario)
 
-    # Filtrado inteligente por coincidencias parciales y sin tildes
     if busqueda_normalizada:
         col_titulo = columnas_reales[0]
         col_autor = columnas_reales[1]
@@ -46,38 +49,20 @@ else:
 
     st.subheader(f"Libros encontrados ({len(df_filtrado)})")
 
-    # Mostrar la lista interactiva
     if not df_filtrado.empty:
         for index, row in df_filtrado.iterrows():
             titulo_libro = row.iloc[0]
             autor_libro = row.iloc[1]
             lugar = row.iloc[2] if len(row) > 2 else "No especificado"
             donde = row.iloc[3] if len(row) > 3 else "No especificado"
+            prestado_a = row.iloc[4] if len(row) > 4 and pd.notna(row.iloc[4]) else "Nadie (Disponible)"
             
             with st.expander(f"📖 {titulo_libro} — *{autor_libro}*"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"📍 **Ubicación:** {lugar} — {donde}")
-                with col2:
-                    # Identificar la columna 'Dejado a:' (asumimos que es la quinta, índice 4)
-                    idx_dejado = 4 if len(columnas_reales) > 4 else len(columnas_reales) - 1
-                    col_dejado_nombre = columnas_reales[idx_dejado]
-                    
-                    prestado_actual = str(row.iloc[idx_dejado]) if pd.notna(row.iloc[idx_dejado]) else ""
-                    nuevo_prestamo = st.text_input("Dejado a:", value=prestado_actual, key=f"user_{index}")
-                    
-                    if st.button("💾 Guardar en la Nube", key=f"btn_{index}"):
-                        # Modificamos el valor localmente
-                        df.at[index, col_dejado_nombre] = nuevo_prestamo if nuevo_prestamo.strip() != "" else None
-                        
-                        # Guardamos directamente de vuelta en Google Sheets de forma segura
-                        try:
-                            conn.update(data=df)
-                            st.success(f"¡Préstamo de '{titulo_libro}' guardado en Google Sheets!")
-                            st.rerun()
-                        except Exception as err:
-                            st.error(f"No se pudo escribir en Google Sheets: {err}")
-                            st.info("Asegúrate de que el documento no esté bloqueado o compartido sin permisos de edición.")
+                st.markdown(f"📍 **Ubicación:** {lugar} — {donde}")
+                st.markdown(f"👤 **Estado actual:** Prestado a {prestado_a}" if prestado_a != "Nadie (Disponible)" else "✅ **Estado actual:** Disponible en la estantería")
+                
+                # Explicación de edición debido a las restricciones del servidor
+                st.caption("Nota: Para modificar a quién se le deja, edítalo directamente en la app de Google Sheets de tu móvil y los cambios aparecerán aquí al instante.")
                         
         st.markdown("---")
         st.dataframe(df, use_container_width=True)
