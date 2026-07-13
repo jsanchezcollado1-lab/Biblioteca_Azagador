@@ -1,5 +1,2 @@
 streamlit
 pandas
-openpyxl
-st-theme
-st-gsheets-connection
