@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import unicodedata
 
-st.set_page_config(page_title="Mi Biblioteca Virtual", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Biblioteca Azagador", page_icon="📚", layout="wide")
 
 # URL de lectura pública de tu Google Sheets (Exportado a CSV)
 URL_CSV = "https://docs.google.com/spreadsheets/d/1seARxKE_IvbGkQXZYgPWLmW-k34NsFIF/export?format=csv"
@@ -41,7 +41,7 @@ def cargar_biblioteca():
 
 df = cargar_biblioteca()
 
-st.title("📚 Buscador y Gestor de Biblioteca")
+st.title("📚 Biblioteca COLLATUS TURIELIS")
 st.write("Busca tus libros y registra los préstamos directamente en la pantalla.")
 
 if df.empty:
