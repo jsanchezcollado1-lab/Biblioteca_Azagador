@@ -15,7 +15,7 @@ def normalizar_texto(texto):
     texto = str(texto).lower().strip()
     return "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
-# Cargar la base de datos combinando la lista fija de Google y el archivo local de préstamos
+# Cargar la base de datos de manera limpia y sin errores visuales
 def cargar_biblioteca():
     try:
         df_libros = pd.read_csv(URL_CSV)
@@ -23,15 +23,19 @@ def cargar_biblioteca():
         st.error("No se pudo leer la lista de Google Sheets. Asegúrate de que el documento siga compartido como 'Cualquier persona con el enlace'.")
         return pd.DataFrame()
         
-    # Inicializar o cargar el archivo local donde se anotan los nombres de los préstamos
+    # Cargamos el archivo de préstamos de forma segura si existe
     if os.path.exists(ARCHIVO_PRESTAMOS):
-        df_prestamos = pd.read_csv(ARCHIVO_PRESTAMOS, index_col="Titulo")
+        try:
+            df_prestamos = pd.read_csv(ARCHIVO_PRESTAMOS, index_col="Titulo")
+        except Exception:
+            df_prestamos = pd.DataFrame(columns=["PrestadoA"])
+            df_prestamos.index.name = "Titulo"
     else:
+        # Si no existe, creamos una estructura vacía en memoria silenciosamente
         df_prestamos = pd.DataFrame(columns=["PrestadoA"])
         df_prestamos.index.name = "Titulo"
         
-    # Combinar los estados de los préstamos con la lista principal de libros
-    # Aseguramos que la columna 'Dejado a:' refleje el archivo local
+    # Combinar de forma segura los libros con los nombres de los préstamos
     df_libros["Dejado a:"] = df_libros.iloc[:, 0].map(df_prestamos["PrestadoA"]).fillna("")
     return df_libros
 
@@ -41,7 +45,7 @@ st.title("📚 Buscador y Gestor de Biblioteca")
 st.write("Busca tus libros y registra los préstamos directamente en la pantalla.")
 
 if df.empty:
-    st.warning("La base de datos está vacía o inaccesible.")
+    st.warning("Cargando la base de datos o documento inaccesible...")
 else:
     columnas_reales = df.columns.tolist()
     
@@ -71,30 +75,30 @@ else:
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown(f"📍 **Ubicación:** {lugar} — {donde}")
-                    if prestado_actual and prestado_actual != "nan":
+                    if prestado_actual and prestado_actual != "nan" and prestado_actual != "":
                         st.error(f"🔴 Prestado a: **{prestado_actual}**")
                     else:
                         st.success("✅ Disponible en la estantería")
                 with col2:
-                    # Input de texto completamente interactivo
-                    nuevo_input = st.text_input("Cambiar estado (deja vacío si te lo han devuelto):", value=prestado_actual if prestado_actual != "nan" else "", key=f"inp_{index}")
+                    nuevo_input = st.text_input("Dejado a:", value=prestado_actual if (prestado_actual != "nan" and prestado_actual != "") else "", key=f"inp_{index}")
                     
                     if st.button("💾 Guardar Cambios", key=f"btn_{index}"):
-                        # Cargar el registro actual
                         if os.path.exists(ARCHIVO_PRESTAMOS):
-                            df_p = pd.read_csv(ARCHIVO_PRESTAMOS, index_col="Titulo")
+                            try:
+                                df_p = pd.read_csv(ARCHIVO_PRESTAMOS, index_col="Titulo")
+                            except Exception:
+                                df_p = pd.DataFrame(columns=["PrestadoA"])
+                                df_p.index.name = "Titulo"
                         else:
                             df_p = pd.DataFrame(columns=["PrestadoA"])
                             df_p.index.name = "Titulo"
                             
-                        # Actualizar el valor del libro concreto
                         if nuevo_input.strip() == "":
                             if titulo_libro in df_p.index:
                                 df_p = df_p.drop(titulo_libro)
                         else:
                             df_p.loc[titulo_libro, "PrestadoA"] = nuevo_input.strip()
                             
-                        # Guardar el archivo en el almacenamiento persistente de la app
                         df_p.to_csv(ARCHIVO_PRESTAMOS)
                         st.success("¡Cambio guardado!")
                         st.clear_cache()
