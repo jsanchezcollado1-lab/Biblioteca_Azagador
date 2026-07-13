@@ -101,7 +101,7 @@ else:
                             
                         df_p.to_csv(ARCHIVO_PRESTAMOS)
                         st.success("¡Cambio guardado!")
-                        st.clear_cache()
+                        st.cache_data.clear()
                         st.rerun()
                         
         st.markdown("---")
