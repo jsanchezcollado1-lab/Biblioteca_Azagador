@@ -1,40 +1,50 @@
 import streamlit as st
 import pandas as pd
+import os
 import unicodedata
 
 st.set_page_config(page_title="Mi Biblioteca Virtual", page_icon="📚", layout="wide")
 
-# Usamos directamente la URL de exportación pública que no requiere permisos de API de Google
+# URL de lectura pública de tu Google Sheets (Exportado a CSV)
 URL_CSV = "https://docs.google.com/spreadsheets/d/1seARxKE_IvbGkQXZYgPWLmW-k34NsFIF/export?format=csv"
+ARCHIVO_PRESTAMOS = "registro_prestamos.csv"
 
-# Función para quitar tildes y hacer la búsqueda infalible
 def normalizar_texto(texto):
     if pd.isna(texto):
         return ""
     texto = str(texto).lower().strip()
     return "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
-# Cargar los datos directamente desde el enlace CSV público
-@st.cache_data(ttl=5)  # Se actualiza rápido
-def cargar_datos():
+# Cargar la base de datos combinando la lista fija de Google y el archivo local de préstamos
+def cargar_biblioteca():
     try:
-        # Forzamos la lectura limpia del CSV de Google
-        return pd.read_csv(URL_CSV)
-    except Exception as e:
-        st.error(f"Error al leer el documento de Google Sheets: {e}")
+        df_libros = pd.read_csv(URL_CSV)
+    except Exception:
+        st.error("No se pudo leer la lista de Google Sheets. Asegúrate de que el documento siga compartido como 'Cualquier persona con el enlace'.")
         return pd.DataFrame()
+        
+    # Inicializar o cargar el archivo local donde se anotan los nombres de los préstamos
+    if os.path.exists(ARCHIVO_PRESTAMOS):
+        df_prestamos = pd.read_csv(ARCHIVO_PRESTAMOS, index_col="Titulo")
+    else:
+        df_prestamos = pd.DataFrame(columns=["PrestadoA"])
+        df_prestamos.index.name = "Titulo"
+        
+    # Combinar los estados de los préstamos con la lista principal de libros
+    # Aseguramos que la columna 'Dejado a:' refleje el archivo local
+    df_libros["Dejado a:"] = df_libros.iloc[:, 0].map(df_prestamos["PrestadoA"]).fillna("")
+    return df_libros
 
-df = cargar_datos()
+df = cargar_biblioteca()
 
 st.title("📚 Buscador y Gestor de Biblioteca")
-st.write("Busca cualquier libro de tu colección en tiempo real.")
+st.write("Busca tus libros y registra los préstamos directamente en la pantalla.")
 
 if df.empty:
-    st.warning("No se pudieron cargar los libros. Revisa que el documento de Google Sheets esté compartido como 'Cualquier persona con el enlace'.")
+    st.warning("La base de datos está vacía o inaccesible.")
 else:
     columnas_reales = df.columns.tolist()
     
-    # Buscador interactivo
     busqueda_usuario = st.text_input("🔍 Escribe el título, autor o letras del libro:", "")
     busqueda_normalizada = normalizar_texto(busqueda_usuario)
 
@@ -55,14 +65,40 @@ else:
             autor_libro = row.iloc[1]
             lugar = row.iloc[2] if len(row) > 2 else "No especificado"
             donde = row.iloc[3] if len(row) > 3 else "No especificado"
-            prestado_a = row.iloc[4] if len(row) > 4 and pd.notna(row.iloc[4]) else "Nadie (Disponible)"
+            prestado_actual = str(row["Dejado a:"]).strip()
             
             with st.expander(f"📖 {titulo_libro} — *{autor_libro}*"):
-                st.markdown(f"📍 **Ubicación:** {lugar} — {donde}")
-                st.markdown(f"👤 **Estado actual:** Prestado a {prestado_a}" if prestado_a != "Nadie (Disponible)" else "✅ **Estado actual:** Disponible en la estantería")
-                
-                # Explicación de edición debido a las restricciones del servidor
-                st.caption("Nota: Para modificar a quién se le deja, edítalo directamente en la app de Google Sheets de tu móvil y los cambios aparecerán aquí al instante.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"📍 **Ubicación:** {lugar} — {donde}")
+                    if prestado_actual and prestado_actual != "nan":
+                        st.error(f"🔴 Prestado a: **{prestado_actual}**")
+                    else:
+                        st.success("✅ Disponible en la estantería")
+                with col2:
+                    # Input de texto completamente interactivo
+                    nuevo_input = st.text_input("Cambiar estado (deja vacío si te lo han devuelto):", value=prestado_actual if prestado_actual != "nan" else "", key=f"inp_{index}")
+                    
+                    if st.button("💾 Guardar Cambios", key=f"btn_{index}"):
+                        # Cargar el registro actual
+                        if os.path.exists(ARCHIVO_PRESTAMOS):
+                            df_p = pd.read_csv(ARCHIVO_PRESTAMOS, index_col="Titulo")
+                        else:
+                            df_p = pd.DataFrame(columns=["PrestadoA"])
+                            df_p.index.name = "Titulo"
+                            
+                        # Actualizar el valor del libro concreto
+                        if nuevo_input.strip() == "":
+                            if titulo_libro in df_p.index:
+                                df_p = df_p.drop(titulo_libro)
+                        else:
+                            df_p.loc[titulo_libro, "PrestadoA"] = nuevo_input.strip()
+                            
+                        # Guardar el archivo en el almacenamiento persistente de la app
+                        df_p.to_csv(ARCHIVO_PRESTAMOS)
+                        st.success("¡Cambio guardado!")
+                        st.clear_cache()
+                        st.rerun()
                         
         st.markdown("---")
         st.dataframe(df, use_container_width=True)
