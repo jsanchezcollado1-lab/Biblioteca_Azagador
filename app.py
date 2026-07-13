@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import unicodedata
 
-st.set_page_config(page_title="Mi Biblioteca Virtual", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Biblioteca Azagador", page_icon="📚", layout="wide")
 
 EXCEL_FILE = "inventario_libros.xlsx"
 
@@ -27,7 +27,7 @@ def cargar_datos():
 
 df = cargar_datos()
 
-st.title("📚 Buscador y Gestor de Biblioteca")
+st.title("📚 Biblioteca COLLATUS TURIELIS")
 st.write("Busca cualquier libro y registra a quién se lo has prestado.")
 
 # Alerta si la base de datos está totalmente vacía
