@@ -71,6 +71,9 @@ else:
             donde = row.iloc[3] if len(row) > 3 else "No especificado"
             prestado_actual = str(row["Dejado a:"]).strip()
             
+            # Obtener la sinopsis (Columna G -> Índice 6)
+            sinopsis_libro = row.iloc[6] if len(row) > 6 and not pd.isna(row.iloc[6]) else ""
+            
             with st.expander(f"📖 {titulo_libro} — *{autor_libro}*"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -103,6 +106,12 @@ else:
                         st.success("¡Cambio guardado!")
                         st.cache_data.clear()
                         st.rerun()
+                
+                # --- NUEVA SECCIÓN DE SINOPSIS ---
+                if sinopsis_libro:
+                    st.markdown("---")
+                    st.markdown("**📝 Sinopsis:**")
+                    st.info(f"*{sinopsis_libro}*")
                         
         st.markdown("---")
         st.dataframe(df, use_container_width=True)
